@@ -109,6 +109,8 @@ fi
 source .venv/bin/activate
 pip install --quiet --upgrade pip
 pip install --quiet -r core_engine/requirements.txt -r control_bot/requirements.txt
+# psutil is imported by the bot but is NOT listed in requirements.txt — install it explicitly
+python -c "import psutil" 2>/dev/null || pip install --quiet psutil
 # pandas-ta sanity check (PyPI version installs fine on py3.12)
 python -c "import pandas_ta" 2>/dev/null || pip install --quiet "git+https://github.com/twopirllc/pandas-ta.git@main"
 
@@ -131,9 +133,10 @@ llm:
   default_model: "$LLM_MODEL"
   api_keys:
     openrouter: "$OR_KEY"
+    openrouter_backup: "$OR_KEY"
   request_timeout_seconds: 60
 telegram:
-  bot_token: "$TG_PANEL"
+  bot_token: "$TG_REPORT"
   chat_id: "$TG_CHAT"
 EOF
   chmod 600 "$dir/config.yaml"

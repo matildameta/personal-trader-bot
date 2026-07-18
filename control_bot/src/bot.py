@@ -98,15 +98,28 @@ def _test_llm_token(provider: str, api_key: str) -> tuple[bool, str]:
     """Ping a provider with a tiny request. Returns (ok, detail)."""
     try:
         if provider in ("openrouter", "openrouter_backup", "godmode_openrouter"):
-            r = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": "deepseek/deepseek-chat", "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5},
-                timeout=20,
-            )
-            if r.status_code == 200:
-                return True, "OK"
-            return False, f"HTTP {r.status_code}: {r.text[:120]}"
+            # Try several cheap/free models — token is healthy if ANY returns 200.
+            models = [
+                "openrouter/auto",
+                "meta-llama/llama-3.1-8b-instruct:free",
+                "google/gemma-2-9b-it:free",
+                "deepseek/deepseek-chat",
+            ]
+            last_err = ""
+            for model in models:
+                try:
+                    r = requests.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                        json={"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5},
+                        timeout=20,
+                    )
+                    if r.status_code == 200:
+                        return True, "OK"
+                    last_err = f"HTTP {r.status_code}: {r.text[:120]}"
+                except Exception as e:
+                    last_err = f"error: {e}"
+            return False, last_err
         elif provider == "openai":
             r = requests.post(
                 "https://api.openai.com/v1/chat/completions",
