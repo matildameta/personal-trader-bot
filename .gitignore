@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+*.log
+
+# Local state / databases
+shared/
+*.db
+
+# Secrets (keep config structure, ignore real keys)
+core_engine/config.yaml
+control_bot/config.yaml
+
+# OS
+.DS_Store
+*.tar.gz

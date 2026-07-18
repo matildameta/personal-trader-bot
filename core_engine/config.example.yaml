@@ -1,0 +1,67 @@
+# Copy this file to config.yaml and fill in real values.
+# Secrets live here (loaded once at startup) — exchange key + AI provider
+# keys. Live-adjustable trading parameters (capital, leverage cap, strategy
+# persona, language, pause state) are stored in shared/bot_state.db and can
+# be changed anytime from the control_bot without restarting this process.
+
+network: testnet          # "testnet" or "mainnet" — start on testnet, always.
+
+hyperliquid:
+  account_address: "0xYOUR_MAIN_WALLET_PUBLIC_ADDRESS"
+  secret_key: "YOUR_API_WALLET_PRIVATE_KEY"     # generate at https://app.hyperliquid.xyz/API
+                                                  # use an API wallet, not your main wallet's key
+
+llm:
+  # The AI side is now a FIXED 4-stage pipeline (chart analyst -> fundamental
+  # analyst -> synthesizer -> decision maker, see core_engine/src/ai_pipeline.py)
+  # — there is no model to pick anymore. Each provider key you add is stored
+  # in its own slot below and used wherever the pipeline needs that vendor.
+  #
+  # Adding just an OpenRouter key is enough to power all 4 stages (it proxies
+  # Claude/GPT/DeepSeek/Gemini under one key). OpenAI/Gemini keys are optional
+  # direct fallbacks used automatically if OpenRouter isn't configured.
+  #
+  # NOTE: these are only the initial seed — after first run, add/replace any
+  # key anytime from control_bot's "🔑 AI keys" menu (each key is saved to its
+  # correct slot here automatically, and the engine restarts to pick it up).
+  # /strategy (analysis persona) is still live-changeable with no restart.
+  api_keys:
+    openrouter: "YOUR_OPENROUTER_API_KEY"   # recommended: powers the whole pipeline alone
+    openai: ""                              # optional direct fallback
+    gemini: ""                              # optional direct fallback
+  request_timeout_seconds: 60
+
+telegram:
+  bot_token: "YOUR_CORE_ENGINE_BOT_TOKEN"   # can be a different bot from control_bot
+  chat_id: "YOUR_TELEGRAM_CHAT_ID"
+
+# Fallback values used only if the shared DB has never been seeded before
+# (fresh install). After first run, change symbols/timeframes live via
+# control_bot's /symbols and /timeframes commands instead of editing here.
+symbols: ["ETH"]
+timeframes: ["15m", "1h", "4h"]
+loop_interval_seconds: 300   # 5 min polling. A future upgrade could switch
+                              # to Hyperliquid's userEvents websocket for
+                              # instant fill/position reaction instead of
+                              # polling — not implemented yet, this is the
+                              # simpler and still-reasonable version.
+
+shared_db_path: "../shared/bot_state.db"
+
+# Initial values only — after first run, change ALL of these live via
+# control_bot (see its /help for the full command list).
+defaults:
+  capital_usd: 30
+  starting_capital_usd: 30      # baseline for %-based P&L reports, /setstartcapital
+  max_leverage: 5
+  risk_per_trade_pct: 1.5
+  max_daily_loss_pct: 5         # /setdailyloss
+  max_consecutive_losses: 3     # /setconsecutivelosses
+  min_notional_usd: 10
+  language: "en"       # "en" or "fa" — affects Telegram messages only
+  paused: false
+  strategy: "balanced"          # /strategy — conservative/balanced/aggressive/
+                                 # scalper/trend_follower/mean_reversion/swing
+  sizing_mode: "auto"
+  trade_capital_pct: 50
+  report_interval_hours: 24     # /reportevery — 0 disables auto P&L reports
