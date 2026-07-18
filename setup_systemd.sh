@@ -9,8 +9,8 @@
 # ============================================================================
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/matildameta/trading-bot-hl.git}"
-REPO_DIR="${REPO_DIR:-trading-bot-hl}"
+REPO_URL="${REPO_URL:-https://github.com/matildameta/personal-trader-bot.git}"
+REPO_DIR="${REPO_DIR:-personal-trader-bot}"
 PY_MIN="3.10"
 
 # ----- resolved absolute paths (used by the systemd units) -----
@@ -47,26 +47,29 @@ read -rsp "🔓 OpenRouter API key (for LLM models): " OR_KEY; echo
 # 2) SYSTEM PREREQUISITES
 # ---------------------------------------------------------------------------
 echo; echo "▶ Step 2/6 — Checking and installing system prerequisites"
+# System tools
 need_apt=()
 command -v git >/dev/null 2>&1 || need_apt+=(git)
-command -v python3 >/dev/null 2>&1 || need_apt+=(python3)
 command -v gcc >/dev/null 2>&1 || need_apt+=(build-essential)
-# Prefer the newest python available; on Ubuntu 22.04 only 3.10 ships by default,
-# so fall back to that instead of demanding 3.12/3.11 which may be absent.
-if ! command -v python3.12 >/dev/null 2>&1 && ! command -v python3.11 >/dev/null 2>&1; then
-  # no 3.12/3.11 present — make sure 3.10 (the system default) is installed
-  need_apt+=(python3)
-fi
 if [ ${#need_apt[@]} -gt 0 ]; then
   echo "  Installing: ${need_apt[*]}"
   export DEBIAN_FRONTEND=noninteractive
-  # pre-seed debconf so packages like iptables-persistent never prompt
-  echo "iptables-persistent iptables-persistent/autosave_v4 boolean false" | debconf-set-selections 2>/dev/null
-  echo "iptables-persistent iptables-persistent/autosave_v6 boolean false" | debconf-set-selections 2>/dev/null
   sudo apt-get update -y
   sudo apt-get install -y "${need_apt[@]}"
 fi
-PYBIN="$(command -v python3.12 || command -v python3.11 || command -v python3)"
+# We run the bot on Python 3.12 (Ubuntu 22.04 only ships 3.10 by default,
+# so we pull 3.12 from the deadsnakes PPA when it is missing).
+if ! command -v python3.12 >/dev/null 2>&1; then
+  echo "  Python 3.12 not found — adding deadsnakes PPA"
+  export DEBIAN_FRONTEND=noninteractive
+  echo "iptables-persistent iptables-persistent/autosave_v4 boolean false" | debconf-set-selections 2>/dev/null
+  echo "iptables-persistent iptables-persistent/autosave_v6 boolean false" | debconf-set-selections 2>/dev/null
+  sudo apt-get install -y software-properties-common
+  sudo add-apt-repository -y ppa:deadsnakes/ppa
+  sudo apt-get update -y
+  sudo apt-get install -y python3.12 python3.12-venv python3.12-dev
+fi
+PYBIN="$(command -v python3.12)"
 echo "  Python: $($PYBIN --version 2>&1)"
 
 # ---------------------------------------------------------------------------
@@ -91,14 +94,22 @@ CTL_DIR="$INSTALL_ROOT/control_bot"
 # 4) PYTHON VENV + DEPENDENCIES
 # ---------------------------------------------------------------------------
 echo; echo "▶ Step 4/6 — Creating virtualenv and installing dependencies"
-if [ ! -d .venv ]; then
-  "$PYBIN" -m venv .venv
+# Always (re)create the venv with the resolved Python (PYBIN = 3.12).
+# If an old venv built with a different python exists, drop it first so we
+# never end up installing deps into a stale 3.10 venv.
+if [ -d .venv ]; then
+  VENV_PY="$(.venv/bin/python --version 2>/dev/null || echo unknown)"
+  if [ "$VENV_PY" != "$($PYBIN --version 2>&1)" ]; then
+    echo "  Removing stale venv ($VENV_PY) to rebuild with $($PYBIN --version 2>&1)"
+    rm -rf .venv
+  fi
 fi
+"$PYBIN" -m venv .venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
 pip install --quiet --upgrade pip
 pip install --quiet -r core_engine/requirements.txt -r control_bot/requirements.txt
-# pandas-ta is sometimes missing on PyPI for newer pythons — fall back to git
+# pandas-ta sanity check (PyPI version installs fine on py3.12)
 python -c "import pandas_ta" 2>/dev/null || pip install --quiet "git+https://github.com/twopirllc/pandas-ta.git@main"
 
 # ---------------------------------------------------------------------------
