@@ -144,7 +144,17 @@ class HyperliquidClient:
             amt = round(float(amount), 2)
             if amt <= 0:
                 return {"ok": False, "msg": "مقدار باید بزرگتر از صفر باشد", "spot_before": spot_before, "perp_before": perp_before}
-            self.exchange.usd_class_transfer(amt, to_perp)
+            # The SDK returns a dict (not raising) on failure, so inspect it.
+            resp = self.exchange.usd_class_transfer(amt, to_perp)
+            if isinstance(resp, dict) and resp.get("status") == "err":
+                detail = resp.get("response", "unknown error")
+                # Friendly message for the common unified-account case
+                if "unified" in str(detail).lower():
+                    return {"ok": False,
+                            "msg": "انتقال انجام نشد: حساب شما در حالت UNIFIED است و انتقال اسپات↔فیوچر غیرفعال است. لطفاً حساب را به حالت عادی (CLASSIC) تغییر دهید یا مستقیماً از والت متحد استفاده کنید.",
+                            "spot_before": spot_before, "perp_before": perp_before}
+                return {"ok": False, "msg": f"انتقال انجام نشد: {detail}",
+                        "spot_before": spot_before, "perp_before": perp_before}
             # give the chain a moment to settle
             import time
             time.sleep(2)
